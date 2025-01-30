@@ -56,7 +56,7 @@ if __name__ == '__main__':
 
     # Arguments parsing
     parser = argparse.ArgumentParser(description='Visual Prompt Encoder Pytorch Implementation')
-    parser.add_argument('--datapath', type=str, default='/root/paddlejob/workspace/env_run/datsets/')
+    parser.add_argument('--datapath', type=str, default='/data/rsterzinger/datasets/')
     parser.add_argument('--benchmark', type=str, default='coco', choices=['pascal', 'coco', 'fss'])
     parser.add_argument('--logpath', type=str, default='')
     parser.add_argument('--bsz', type=int, default=2) # batch size = num_gpu * bsz default num_gpu = 4
@@ -66,7 +66,7 @@ if __name__ == '__main__':
     parser.add_argument('--nworker', type=int, default=8)
     parser.add_argument('--seed', type=int, default=321)
     parser.add_argument('--fold', type=int, default=0, choices=[0, 1, 2, 3])
-    parser.add_argument('--condition', type=str, default='scribble', choices=['point', 'scribble', 'box', 'mask'])
+    parser.add_argument('--condition', type=str, default='mask', choices=['point', 'scribble', 'box', 'mask'])
     parser.add_argument('--use_ignore', type=bool, default=True, help='Boundaries are not considered during pascal training')
     parser.add_argument('--local_rank', type=int, default=-1, help='number of cpu threads to use during batch generation')
     parser.add_argument('--num_query', type=int, default=50)

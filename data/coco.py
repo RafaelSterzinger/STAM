@@ -79,6 +79,16 @@ class DatasetCOCO(Dataset):
         img_metadata_classwise = {}
         for sub_cls in sub_class_file_list.keys():
             img_metadata_classwise[sub_cls-1] = [data[0].split('/')[-1].split('.')[0] for data in sub_class_file_list[sub_cls]]
+
+#        for sub_cls in img_metadata_classwise.keys():
+#            for query_name in img_metadata_classwise[sub_cls]:
+#                if 'val2014' in query_name:
+#                    base_path = os.path.join(self.base_path, 'val2014')
+#                else:
+#                    base_path = os.path.join(self.base_path, 'train2014')
+#                # test if query image exists
+#                if not os.path.exists(os.path.join(base_path, query_name + '.jpg')):
+#                    print('Image %s does not exist' % query_name)
         return img_metadata_classwise
 
     def build_img_metadata(self):

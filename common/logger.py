@@ -92,7 +92,8 @@ class Logger:
 
         cls.logpath = os.path.join('logs', logpath + '.log')
         cls.benchmark = args.benchmark
-        os.makedirs(cls.logpath)
+        if not os.path.exists(cls.logpath):
+            os.makedirs(cls.logpath)
 
         logging.basicConfig(filemode='w',
                             filename=os.path.join(cls.logpath, 'log.txt'),
