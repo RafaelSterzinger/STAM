@@ -3,6 +3,7 @@ import torch
 from torchvision import transforms
 from torch.utils.data import DataLoader
 
+from data.map import DatasetMAPSEG
 from data.pascal import DatasetPASCAL
 from data.coco import DatasetCOCO
 # from data.coco2pascal import DatasetCOCO2PASCAL
@@ -16,7 +17,7 @@ class FSSDataset:
         cls.datasets = {
             'pascal': DatasetPASCAL,
             'coco': DatasetCOCO,
-            # 'coco2pascal': DatasetCOCO2PASCAL
+            'maps': DatasetMAPSEG,
         }
 
         cls.img_mean = [0.485, 0.456, 0.406]
@@ -36,12 +37,9 @@ class FSSDataset:
         nworker = nworker if split == 'trn' else 0
 
         dataset = cls.datasets[benchmark](cls.datapath, fold=fold, transform=cls.transform, split=split, shot=shot, use_original_imgsize=cls.use_original_imgsize)
+        sampler = torch.utils.data.distributed.DistributedSampler(dataset,shuffle=shuffle)
         if split == 'trn':
-            sampler = torch.utils.data.distributed.DistributedSampler(dataset,shuffle=shuffle)
             shuffle = False
-        else:
-            sampler = torch.utils.data.distributed.DistributedSampler(dataset,shuffle=shuffle)
-            pin_memory = True
-        dataloader = DataLoader(dataset, batch_size=bsz, shuffle=False, pin_memory=True, num_workers=nworker, sampler=sampler)
 
+        dataloader = DataLoader(dataset, batch_size=bsz, shuffle=False, pin_memory=True, num_workers=nworker, sampler=sampler)
         return dataloader

@@ -56,8 +56,9 @@ if __name__ == '__main__':
 
     # Arguments parsing
     parser = argparse.ArgumentParser(description='Visual Prompt Encoder Pytorch Implementation')
-    parser.add_argument('--datapath', type=str, default='/data/rsterzinger/datasets/')
-    parser.add_argument('--benchmark', type=str, default='coco', choices=['pascal', 'coco', 'fss'])
+    parser.add_argument('--datapath', type=str, default='/data/databases/')
+    parser.add_argument('--benchmark', type=str, default='maps', choices=['pascal', 'coco', 'maps'])
+    parser.add_argument('--eval', action='store_true')
     parser.add_argument('--logpath', type=str, default='')
     parser.add_argument('--bsz', type=int, default=2) # batch size = num_gpu * bsz default num_gpu = 4
     parser.add_argument('--lr', type=float, default=1e-4)
@@ -68,10 +69,11 @@ if __name__ == '__main__':
     parser.add_argument('--fold', type=int, default=0, choices=[0, 1, 2, 3])
     parser.add_argument('--condition', type=str, default='mask', choices=['point', 'scribble', 'box', 'mask'])
     parser.add_argument('--use_ignore', type=bool, default=True, help='Boundaries are not considered during pascal training')
-    parser.add_argument('--local_rank', type=int, default=-1, help='number of cpu threads to use during batch generation')
+    parser.add_argument('--local-rank', type=int, default=-1, help='number of cpu threads to use during batch generation')
     parser.add_argument('--num_query', type=int, default=50)
     parser.add_argument('--backbone', type=str, default='resnet50', choices=['vgg16', 'resnet50', 'resnet101'])
     args = parser.parse_args()
+
     # Distributed setting
     local_rank = args.local_rank
     dist.init_process_group(backend='nccl')
@@ -82,8 +84,14 @@ if __name__ == '__main__':
     if utils.is_main_process():
         Logger.initialize(args, training=True)
     utils.fix_randseed(args.seed)
+
     # Model initialization
     model = VRP_encoder(args, args.backbone, False)
+    if args.eval:
+        model_path = args.logpath + '.log/best_model.pt'
+        model.load(args.logpath + model_path)
+        print('Model loaded succesfully from {}'.format(model_path))
+
     if utils.is_main_process():
         Logger.log_params(model)
 
@@ -119,13 +127,16 @@ if __name__ == '__main__':
 
     dataloader_val = FSSDataset.build_dataloader(args.benchmark, args.bsz, args.nworker, args.fold, 'val')
 
+    print('Model is evaluated on {}'.format(args.benchmark))
+
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max= args.epochs * len(dataloader_trn))
     # Training 
     best_val_miou = float('-inf')
     best_val_loss = float('inf')
     for epoch in range(args.epochs):
 
-        trn_loss, trn_miou, trn_fb_iou = train(args, epoch, model, sam_model, dataloader_trn, optimizer, scheduler, training=True)
+        if not args.eval:
+            trn_loss, trn_miou, trn_fb_iou = train(args, epoch, model, sam_model, dataloader_trn, optimizer, scheduler, training=True)
         with torch.no_grad():
             val_loss, val_miou, val_fb_iou = train(args, epoch, model, sam_model, dataloader_val, optimizer, scheduler, training=False)
 
@@ -139,5 +150,8 @@ if __name__ == '__main__':
             Logger.tbd_writer.add_scalars('data/miou', {'trn_miou': trn_miou, 'val_miou': val_miou}, epoch)
             Logger.tbd_writer.add_scalars('data/fb_iou', {'trn_fb_iou': trn_fb_iou, 'val_fb_iou': val_fb_iou}, epoch)
             Logger.tbd_writer.flush()
+
+        if args.eval:
+            break
     Logger.tbd_writer.close()
     Logger.info('==================== Finished Training ====================')
