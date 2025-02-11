@@ -7,6 +7,7 @@ import torch.nn.functional as F
 import torch
 import PIL.Image as Image
 import numpy as np
+import albumentations as A
 
 _original_dict = {
     0: np.array([0, 0, 0]), #"frame"
@@ -45,6 +46,13 @@ class DatasetMAPSEG(Dataset):
         self.use_original_imgsize = use_original_imgsize
 
         self.img_metadata = self.build_img_metadata()
+        self.augmentations_full = A.Compose([
+             A.ColorJitter(),
+        ])
+        self.augmentations_patch = A.Compose([
+             A.RandomRotate90(),
+             A.HorizontalFlip(),
+        ])
 
     def __len__(self):
         return len(self.img_metadata)*4 if self.split == 'trn' else 1000
@@ -114,23 +122,30 @@ class DatasetMAPSEG(Dataset):
         else:
             base_path = os.path.join(base_path, 'train')
 
-        query_img = Image.open(os.path.join(base_path, 'images', query_name + '.png')).convert('RGB')
-        query_mask = np.asarray(Image.open(os.path.join(base_path, 'labels', query_name + '.png')).convert('RGB')).copy()
+        query_img = np.array(Image.open(os.path.join(base_path, 'images', query_name + '.png')).convert('RGB'))
+        query_mask = np.array(Image.open(os.path.join(base_path, 'labels', query_name + '.png')).convert('RGB'))
+        transform =  self.augmentations_full(image=query_img, mask=query_mask)
+        query_img, query_mask = transform['image'], transform['mask']
+
         # Define the size of the slices
-        width, height = query_img.size
+        width, height = query_img.shape[0:2]
 
         # Define the slices for each region (top-left, top-right, bottom-left, bottom-right)
         sub_images_pairs = [
-            (query_img.crop((0, 0, width // 2, height // 2)), query_mask[0:height // 2, 0:width // 2]),  # Top-left
-            (query_img.crop((width // 2, 0, width, height // 2)), query_mask[0:height // 2, width // 2:]),  # Top-right
-            (query_img.crop((0, height // 2, width // 2, height)), query_mask[height // 2:, 0:width // 2]),  # Bottom-left
-            (query_img.crop((width // 2, height // 2, width, height)), query_mask[height // 2:, width // 2:]),  # Bottom-right
+            (query_img[0:height // 2, 0:width // 2], query_mask[0:height // 2, 0:width // 2]),  # Top-left
+            (query_img[0:height // 2, width // 2:], query_mask[0:height // 2, width // 2:]),  # Top-right
+            (query_img[height // 2:, 0:width // 2], query_mask[height // 2:, 0:width // 2]),  # Bottom-left
+            (query_img[height // 2:, width // 2:], query_mask[height // 2:, width // 2:]),  # Bottom-right
         ]
 
         # Select a random quadrant of the image as query
         query_id = np.random.randint(0, 4)
-        query_img = sub_images_pairs[query_id][0]
-        query_mask = sub_images_pairs[query_id][1]
+        query_img, query_mask = sub_images_pairs[query_id]
+
+        transform =  self.augmentations_patch(image=query_img, mask=query_mask)
+        query_img, query_mask = transform['image'], transform['mask']
+        query_img = Image.fromarray(query_img)
+
 
         # Select a random present class for query
         classes_in_query = list(np.unique(query_mask.reshape(query_mask.shape[0]*query_mask.shape[1], query_mask.shape[2]), axis=0))
@@ -149,8 +164,13 @@ class DatasetMAPSEG(Dataset):
         support_imgs = []
         support_masks = []
         for id in support_ids:
-            support_imgs.append(sub_images_pairs[id][0])
-            support_mask = DatasetMAPSEG.convert_to_binary_mask(sub_images_pairs[id][1], drawn_class)
+            sub_img, sub_mask = sub_images_pairs[id]
+            transform =  self.augmentations_patch(image=sub_img, mask=sub_mask)
+            sub_img, sub_mask = transform['image'], transform['mask']
+            sub_img = Image.fromarray(sub_img)
+            
+            support_imgs.append(sub_img)
+            support_mask = DatasetMAPSEG.convert_to_binary_mask(sub_mask, drawn_class)
             support_masks.append(torch.tensor(support_mask, dtype=torch.long))
 
         query_mask = torch.tensor(query_mask, dtype=torch.long)

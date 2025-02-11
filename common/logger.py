@@ -43,11 +43,11 @@ class AverageMeter:
         fb_iou = (self.intersection_buf.index_select(1, self.class_ids_interest).sum(dim=1) /
                   self.union_buf.index_select(1, self.class_ids_interest).sum(dim=1)).mean() * 100
 
-        return miou, fb_iou
+        return miou, fb_iou, iou[1]*100
 
     def write_result(self, split, epoch):
         self.intersection_buf, self.union_buf = self.reduce_metrics([self.intersection_buf, self.union_buf], False)
-        iou, fb_iou = self.compute_iou()
+        iou, fb_iou, per_class = self.compute_iou()
 
         # loss_buf = torch.stack(self.loss_buf)
         msg = '\n*** %s ' % split
@@ -57,6 +57,9 @@ class AverageMeter:
             loss_buf = self.reduce_metrics([loss_buf])[0]
             msg += 'Avg L: %6.5f  ' % loss_buf.mean()
         msg += 'mIoU: %5.2f   ' % iou
+        for index, c in enumerate(self.class_ids_interest[:5]):
+            msg += '%d: %5.2f   ' %(c, per_class[index])
+        msg += '|  '
         msg += 'FB-IoU: %5.2f   ' % fb_iou
 
         msg += '***\n'
@@ -66,12 +69,15 @@ class AverageMeter:
         if batch_idx % write_batch_idx == 0:
             msg = '[Epoch: %02d] ' % epoch if epoch != -1 else ''
             msg += '[Batch: %04d/%04d] ' % (batch_idx+1, datalen)
-            iou, fb_iou = self.compute_iou()
+            iou, fb_iou, per_class = self.compute_iou()
             if epoch != -1:
                 loss_buf = torch.stack(self.loss_buf)
                 msg += 'L: %6.5f  ' % loss_buf[-1]
                 msg += 'Avg L: %6.5f  ' % loss_buf.mean()
             msg += 'mIoU: %5.2f  |  ' % iou
+            for index, c in enumerate(self.class_ids_interest[:5]):
+                msg += '%d: %5.2f   ' %(c,  per_class[index])
+            msg += '|  '
             msg += 'FB-IoU: %5.2f' % fb_iou
             Logger.info(msg)
     def reduce_metrics(self, metrics, average=True):
