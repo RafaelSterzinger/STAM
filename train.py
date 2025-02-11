@@ -21,6 +21,7 @@ def train(args, epoch, model, sam_model, dataloader, optimizer, scheduler, train
 
     utils.fix_randseed(args.seed + epoch) if training else utils.fix_randseed(args.seed)
     model.module.train_mode() if training else model.module.eval()
+    sam_model.train() if training else sam_model.eval()
     average_meter = AverageMeter(dataloader.dataset)
 
     for idx, batch in enumerate(dataloader):
@@ -47,7 +48,7 @@ def train(args, epoch, model, sam_model, dataloader, optimizer, scheduler, train
 
     average_meter.write_result('Training' if training else 'Validation', epoch)
     avg_loss = utils.mean(average_meter.loss_buf)
-    miou, fb_iou = average_meter.compute_iou()
+    miou, fb_iou, _ = average_meter.compute_iou()
 
     return avg_loss, miou, fb_iou
 
@@ -88,8 +89,10 @@ if __name__ == '__main__':
     # Model initialization
     model = VRP_encoder(args, args.backbone, False)
     if args.eval:
-        model_path = args.logpath + '.log/best_model.pt'
-        model.load(args.logpath + model_path)
+        model_path = 'logs/' + args.logpath + '.log/best_model.pt'
+        state_dict = torch.load(model_path, map_location=device, mmap=True)
+        state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+        model.load_state_dict(state_dict)
         print('Model loaded succesfully from {}'.format(model_path))
 
     if utils.is_main_process():
@@ -117,7 +120,7 @@ if __name__ == '__main__':
         {'params': model.module.transformer_decoder.parameters()},
         {'params': model.module.downsample_query.parameters(), "lr": args.lr},
         {'params': model.module.merge_1.parameters(), "lr": args.lr},
-        
+        {'params': list(filter(lambda p: p.requires_grad, sam_model.parameters()))} # DoRA parameters
         ],lr = args.lr, weight_decay=args.weight_decay, betas=(0.9, 0.999))
     Evaluator.initialize(args)
 
@@ -144,8 +147,9 @@ if __name__ == '__main__':
         if val_miou > best_val_miou:
             best_val_miou = val_miou
             if utils.is_main_process():
-                Logger.save_model_miou(model, epoch, val_miou)
-        if utils.is_main_process():
+                if not args.eval:
+                    Logger.save_model_miou(model, epoch, val_miou)
+        if utils.is_main_process() and not args.eval:
             Logger.tbd_writer.add_scalars('data/loss', {'trn_loss': trn_loss, 'val_loss': val_loss}, epoch)
             Logger.tbd_writer.add_scalars('data/miou', {'trn_miou': trn_miou, 'val_miou': val_miou}, epoch)
             Logger.tbd_writer.add_scalars('data/fb_iou', {'trn_fb_iou': trn_fb_iou, 'val_fb_iou': val_fb_iou}, epoch)

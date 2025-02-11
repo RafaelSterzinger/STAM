@@ -5,11 +5,25 @@ from torch import nn
 import torch.nn.functional as F
 import numpy as np
 
-class  SAM_pred(nn.Module):
-    def __init__(self, ):
+from model.DoRA import DoRA_Sam
+
+class SAM_pred(nn.Module):
+    def __init__(self, dora_rank=4):
         super().__init__()
         self.sam_model = sam_model_registry['vit_h']('model/weights/sam_vit_h_4b8939.pth')
+        if dora_rank > 0:
+            self.dora = DoRA_Sam(self.sam_model, dora_rank)
+            self.sam_model = self.dora.sam
         self.sam_model.eval()
+    
+    def train(self, mode = True):
+        if self.dora is not None:
+            return super().train(mode)
+    
+    def eval(self):
+        if self.dora is not None:
+            return super().eval()
+
 
     def forward_img_encoder(self, query_img):
         query_img = F.interpolate(query_img, (1024,1024), mode='bilinear', align_corners=True)
