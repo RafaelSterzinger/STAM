@@ -94,6 +94,8 @@ class DoRA_Sam(nn.Module):
         # lets freeze first
         for param in sam_model.image_encoder.parameters():
             param.requires_grad = False
+        for param in sam_model.prompt_encoder.parameters():
+            param.requires_grad = False
 
         # Here, we do the surgery
         for t_layer_i, blk in enumerate(sam_model.image_encoder.blocks):

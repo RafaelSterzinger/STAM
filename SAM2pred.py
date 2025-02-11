@@ -14,7 +14,8 @@ class SAM_pred(nn.Module):
         if dora_rank > 0:
             self.dora = DoRA_Sam(self.sam_model, dora_rank)
             self.sam_model = self.dora.sam
-        self.sam_model.eval()
+        else:
+            self.sam_model.eval()
     
     def train(self, mode = True):
         if self.dora is not None:

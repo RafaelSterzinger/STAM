@@ -40,7 +40,6 @@ def train(args, epoch, model, sam_model, dataloader, optimizer, scheduler, train
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            scheduler.step()
 
         area_inter, area_union = Evaluator.classify_prediction(pred_mask.squeeze(1), batch)
         average_meter.update(area_inter, area_union, batch['class_id'], loss.detach().clone())
@@ -117,10 +116,10 @@ if __name__ == '__main__':
         param.requires_grad = False
 
     optimizer = optim.AdamW([
-        {'params': model.module.transformer_decoder.parameters()},
+        {'params': model.module.transformer_decoder.parameters(), "lr": args.lr},
         {'params': model.module.downsample_query.parameters(), "lr": args.lr},
         {'params': model.module.merge_1.parameters(), "lr": args.lr},
-        {'params': list(filter(lambda p: p.requires_grad, sam_model.parameters()))} # DoRA parameters
+        {'params': list(filter(lambda p: p.requires_grad, sam_model.parameters())), "lr": args.lr/10} # DoRA parameters
         ],lr = args.lr, weight_decay=args.weight_decay, betas=(0.9, 0.999))
     Evaluator.initialize(args)
 
@@ -132,7 +131,8 @@ if __name__ == '__main__':
 
     print('Model is evaluated on {}'.format(args.benchmark))
 
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max= args.epochs * len(dataloader_trn))
+    #scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max= args.epochs * len(dataloader_trn))
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=5, threshold=1e-2, threshold_mode='rel', cooldown=0, min_lr=1e-6, eps=1e-8, verbose=True)
     # Training 
     best_val_miou = float('-inf')
     best_val_loss = float('inf')
@@ -142,6 +142,7 @@ if __name__ == '__main__':
             trn_loss, trn_miou, trn_fb_iou = train(args, epoch, model, sam_model, dataloader_trn, optimizer, scheduler, training=True)
         with torch.no_grad():
             val_loss, val_miou, val_fb_iou = train(args, epoch, model, sam_model, dataloader_val, optimizer, scheduler, training=False)
+            scheduler.step(val_miou)
 
         # Save the best model
         if val_miou > best_val_miou:
