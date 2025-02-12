@@ -55,10 +55,10 @@ class DatasetMAPSEG(Dataset):
         ])
 
     def __len__(self):
-        return len(self.img_metadata)*4 if self.split == 'trn' else 1000
+        return len(self.img_metadata)
 
     def __getitem__(self, idx):
-        query_img, query_mask, support_imgs, support_masks, query_name, support_names, class_sample, org_qry_imsize = self.load_frame()
+        query_img, query_mask, support_imgs, support_masks, query_name, support_names, class_sample, org_qry_imsize = self.load_frame(idx)
 
         query_img = self.transform(query_img)
         query_mask = query_mask.float()
@@ -113,8 +113,8 @@ class DatasetMAPSEG(Dataset):
         return query_mask_binary
 
 
-    def load_frame(self):
-        query_name = random.sample(self.img_metadata, 1)[0]
+    def load_frame(self, idx):
+        query_name = self.img_metadata[idx]
 
         base_path = os.path.join(self.base_path, self.fold)
         if self.split == 'val':
