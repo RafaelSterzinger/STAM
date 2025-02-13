@@ -4,6 +4,7 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 
 from data.map import DatasetMAPSEG
+from data.map_siegfried import DatasetMAPSEG_SIEGFRIED
 from data.pascal import DatasetPASCAL
 from data.coco import DatasetCOCO
 # from data.coco2pascal import DatasetCOCO2PASCAL
@@ -18,6 +19,7 @@ class FSSDataset:
             'pascal': DatasetPASCAL,
             'coco': DatasetCOCO,
             'maps': DatasetMAPSEG,
+            'maps_siegfried': DatasetMAPSEG_SIEGFRIED,
         }
 
         cls.img_mean = [0.485, 0.456, 0.406]

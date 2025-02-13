@@ -33,7 +33,7 @@ class DatasetMAPSEG(Dataset):
         self.split = 'val' if split == 'eval' else 'trn'
         self.fold = 'paris' if fold == 0 else 'world'
 
-        print('Training on maps from %s' % self.fold)
+        print('Using maps from %s' % self.fold)
 
         self.nfolds = 2
         self.nclass = 5
@@ -46,13 +46,17 @@ class DatasetMAPSEG(Dataset):
         self.use_original_imgsize = use_original_imgsize
 
         self.img_metadata = self.build_img_metadata()
-        self.augmentations_full = A.Compose([
-             A.ColorJitter(),
-        ])
-        self.augmentations_patch = A.Compose([
-             A.RandomRotate90(),
-             A.HorizontalFlip(),
-        ])
+        if self.split == 'trn':
+            self.augmentations_full = A.Compose([
+                 A.ColorJitter(),
+            ])
+            self.augmentations_patch = A.Compose([
+                 A.RandomRotate90(),
+                 A.HorizontalFlip(),
+            ])
+        else:
+            self.augmentations_full = A.Compose([A.NoOp()])
+            self.augmentations_patch = A.Compose([A.NoOp()])
 
     def __len__(self):
         return len(self.img_metadata)

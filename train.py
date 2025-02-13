@@ -57,7 +57,7 @@ if __name__ == '__main__':
     # Arguments parsing
     parser = argparse.ArgumentParser(description='Visual Prompt Encoder Pytorch Implementation')
     parser.add_argument('--datapath', type=str, default='/data/databases/')
-    parser.add_argument('--benchmark', type=str, default='maps', choices=['pascal', 'coco', 'maps'])
+    parser.add_argument('--benchmark', type=str, default='maps', choices=['pascal', 'coco', 'maps', 'maps_siegfried'])
     parser.add_argument('--eval', action='store_true')
     parser.add_argument('--logpath', type=str, default='')
     parser.add_argument('--bsz', type=int, default=2) # batch size = num_gpu * bsz default num_gpu = 4
@@ -73,6 +73,9 @@ if __name__ == '__main__':
     parser.add_argument('--num_query', type=int, default=50)
     parser.add_argument('--backbone', type=str, default='resnet50', choices=['vgg16', 'resnet50', 'resnet101'])
     args = parser.parse_args()
+
+    if args.benchmark == 'maps_siegfried':
+        assert args.eval
 
     # Distributed setting
     local_rank = args.local_rank
