@@ -59,7 +59,7 @@ class DatasetMAPSEG(Dataset):
             self.augmentations_patch = A.Compose([A.NoOp()])
 
     def __len__(self):
-        return len(self.img_metadata)
+        return len(self.img_metadata) if self.split == 'trn' else len(self.img_metadata)*4
 
     def __getitem__(self, idx):
         query_img, query_mask, support_imgs, support_masks, query_name, support_names, class_sample, org_qry_imsize = self.load_frame(idx)
@@ -118,6 +118,10 @@ class DatasetMAPSEG(Dataset):
 
 
     def load_frame(self, idx):
+        if self.split == 'val':
+            sub_idx = idx-idx//4
+            idx = idx//4
+
         query_name = self.img_metadata[idx]
 
         base_path = os.path.join(self.base_path, self.fold)
@@ -143,7 +147,7 @@ class DatasetMAPSEG(Dataset):
         ]
 
         # Select a random quadrant of the image as query
-        query_id = np.random.randint(0, 4)
+        query_id = np.random.randint(0, 4) if self.split == 'trn' else sub_idx
         query_img, query_mask = sub_images_pairs[query_id]
 
         transform =  self.augmentations_patch(image=query_img, mask=query_mask)
@@ -153,7 +157,7 @@ class DatasetMAPSEG(Dataset):
 
         # Select a random present class for query
         classes_in_query = list(np.unique(query_mask.reshape(query_mask.shape[0]*query_mask.shape[1], query_mask.shape[2]), axis=0))
-        drawn_class = random.sample(classes_in_query, 1)[0]
+        drawn_class = random.sample(classes_in_query, 1)[0] # TODO draw class based on frequency in data set
         class_sample = CLASSES[tuple(drawn_class)]
 
         # Convert query mask to binary

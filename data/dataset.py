@@ -40,8 +40,6 @@ class FSSDataset:
 
         dataset = cls.datasets[benchmark](cls.datapath, fold=fold, transform=cls.transform, split=split, shot=shot, use_original_imgsize=cls.use_original_imgsize)
         sampler = torch.utils.data.distributed.DistributedSampler(dataset,shuffle=shuffle)
-        if split == 'trn':
-            shuffle = False
 
         dataloader = DataLoader(dataset, batch_size=bsz, shuffle=False, pin_memory=True, num_workers=nworker, sampler=sampler)
         return dataloader
