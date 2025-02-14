@@ -69,8 +69,8 @@ if __name__ == '__main__':
     parser.add_argument('--train_mask', action='store_true')
     parser.add_argument('--rank', type=int, default=4) # batch size = num_gpu * bsz default num_gpu = 4
     parser.add_argument('--logpath', type=str, default='')
-    parser.add_argument('--bsz', type=int, default=8) # batch size = num_gpu * bsz default num_gpu = 4
-    parser.add_argument('--lr', type=float, default=1e-4)
+    parser.add_argument('--bsz', type=int, default=2) # batch size = num_gpu * bsz default num_gpu = 4
+    parser.add_argument('--lr', type=float, default=5e-3)
     parser.add_argument('--weight_decay', type=float, default=1e-6)
     parser.add_argument('--epochs', type=int, default=50)
     parser.add_argument('--nworker', type=int, default=8)
@@ -105,7 +105,12 @@ if __name__ == '__main__':
         state_dict = torch.load(model_path, map_location=device, mmap=True)
         state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
         model.load_state_dict(state_dict)
+        dora_path = 'logs/' + args.logpath + '.log/model_dora.pt'
+        if os.path.exists(dora_path):
+            sam_model.dora.load_dora_parameters(dora_path)
+            print('DORA weights found at {}'.format(dora_path))
         print('Model loaded succesfully from {}'.format(model_path))
+        
 
     if utils.is_main_process():
         Logger.log_params(model)
@@ -133,7 +138,7 @@ if __name__ == '__main__':
         {'params': model.module.transformer_decoder.parameters(), "lr": args.lr},
         {'params': model.module.downsample_query.parameters(), "lr": args.lr},
         {'params': model.module.merge_1.parameters(), "lr": args.lr},
-        {'params': list(filter(lambda p: p.requires_grad, sam_model.parameters())), "lr": args.lr/10} # DoRA parameters
+        {'params': list(filter(lambda p: p.requires_grad, sam_model.parameters())), "lr": args.lr} # DoRA parameters
         ],lr = args.lr, weight_decay=args.weight_decay, betas=(0.9, 0.999))
     Evaluator.initialize(args)
 
@@ -146,7 +151,7 @@ if __name__ == '__main__':
     print('Model is evaluated on {}'.format(args.benchmark))
 
     #scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max= args.epochs * len(dataloader_trn))
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=5, threshold=1e-2, threshold_mode='rel', cooldown=0, min_lr=1e-6, eps=1e-8, verbose=True)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=5, threshold=1e-1, threshold_mode='abs', verbose=True)
     # Training 
     best_val_miou = float('-inf')
     best_val_loss = float('inf')
@@ -156,7 +161,7 @@ if __name__ == '__main__':
             trn_loss, trn_miou, trn_fb_iou = train(args, epoch, model, sam_model, dataloader_trn, optimizer, scheduler, training=True)
         with torch.no_grad():
             val_loss, val_miou, val_fb_iou = train(args, epoch, model, sam_model, dataloader_val, optimizer, scheduler, training=False)
-            scheduler.step(val_miou)
+            scheduler.step(val_miou, epoch)
 
         # Save the best model
         if val_miou > best_val_miou:
@@ -164,6 +169,7 @@ if __name__ == '__main__':
             if utils.is_main_process():
                 if not args.eval:
                     Logger.save_model_miou(model, epoch, val_miou)
+                    sam_model.module.dora.save_dora_parameters('logs/' + args.logpath + '.log/model_dora.pt')
 
         if utils.is_main_process() and not args.eval:
             Logger.tbd_writer.add_scalars('data/loss', {'trn_loss': trn_loss, 'val_loss': val_loss}, epoch)
