@@ -57,6 +57,29 @@ class DatasetMAPSEG(Dataset):
         else:
             self.augmentations_full = A.Compose([A.NoOp()])
             self.augmentations_patch = A.Compose([A.NoOp()])
+        if self.split == 'trn':
+            self.class_weigth = self.calc_pixel_density()
+    
+    def calc_pixel_density(self):
+        if os.path.exists(f'data/class_pixel_counts_{self.fold}.npy'):
+            return np.load(f'data/class_pixel_counts_{self.fold}.npy')
+        from collections import defaultdict
+
+        class_pixel_counts = [0] * len(CLASSES)
+
+        for img in self.img_metadata:
+            base_path = os.path.join(self.base_path, self.fold)
+            base_path = os.path.join(base_path, 'train')
+            mask = np.array(Image.open(os.path.join(base_path, 'labels', img + '.png')).convert('RGB'))
+            unique, counts = np.unique(mask.reshape(mask.shape[0]*mask.shape[1], mask.shape[2]), axis=0, return_counts=True)
+            unique = [CLASSES[tuple(cls)] for cls in list(unique)]
+            for cls, count in zip(unique, counts):
+                class_pixel_counts[cls] += count
+        
+        class_pixel_counts = np.array(class_pixel_counts)
+        class_pixel_counts = class_pixel_counts / class_pixel_counts.sum()
+        np.save(f'data/class_pixel_counts_{self.fold}.npy', class_pixel_counts)
+        return class_pixel_counts
 
     def __len__(self):
         return len(self.img_metadata) if self.split == 'trn' else len(self.img_metadata)*4
@@ -157,7 +180,14 @@ class DatasetMAPSEG(Dataset):
 
         # Select a random present class for query
         classes_in_query = list(np.unique(query_mask.reshape(query_mask.shape[0]*query_mask.shape[1], query_mask.shape[2]), axis=0))
-        drawn_class = random.sample(classes_in_query, 1)[0] # TODO draw class based on frequency in data set
+
+        if self.split == 'val':
+            drawn_class = random.sample(classes_in_query, 1)[0]
+        else:
+            present_weights = [1/self.class_weigth[CLASSES[tuple(cls)]] for cls in classes_in_query]
+            total_weight = sum(present_weights)
+            sample_probs = [(w / total_weight) for w in present_weights]
+            drawn_class = random.choices(classes_in_query, k=1, weights=sample_probs)[0]
         class_sample = CLASSES[tuple(drawn_class)]
 
         # Convert query mask to binary

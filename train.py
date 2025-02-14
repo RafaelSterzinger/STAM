@@ -150,7 +150,7 @@ if __name__ == '__main__':
 
     print('Model is evaluated on {}'.format(args.benchmark))
 
-    #scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max= args.epochs * len(dataloader_trn))
+    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max= args.epochs * len(dataloader_trn))
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=5, threshold=1e-1, threshold_mode='abs', verbose=True)
     # Training 
     best_val_miou = float('-inf')
@@ -161,7 +161,7 @@ if __name__ == '__main__':
             trn_loss, trn_miou, trn_fb_iou = train(args, epoch, model, sam_model, dataloader_trn, optimizer, scheduler, training=True)
         with torch.no_grad():
             val_loss, val_miou, val_fb_iou = train(args, epoch, model, sam_model, dataloader_val, optimizer, scheduler, training=False)
-            scheduler.step(val_miou, epoch)
+            scheduler.step(val_miou)
 
         # Save the best model
         if val_miou > best_val_miou:
