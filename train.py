@@ -27,7 +27,13 @@ def train(args, epoch, model, sam_model, dataloader, optimizer, scheduler, train
     for idx, batch in enumerate(dataloader):
         
         batch = utils.to_cuda(batch)
-        protos, _ = model(args.condition, batch['query_img'], batch['support_imgs'].squeeze(1), batch['support_masks'].squeeze(1), training)
+        
+        b, s = batch['support_imgs'].shape[:2]
+        batch['support_imgs'] = batch['support_imgs'].view(b*s,*batch['support_imgs'].shape[2:])
+        batch['support_masks'] = batch['support_masks'].view(b*s,*batch['support_masks'].shape[2:])
+
+        protos, _ = model(args.condition, batch['query_img'].expand(s,*batch['query_img'].shape).reshape(b*s,*batch['query_img'].shape[1:]), batch['support_imgs'], batch['support_masks'], training)
+        protos = protos.reshape(b,s*protos.shape[1], *protos.shape[2:])
 
         low_masks, pred_mask = sam_model(batch['query_img'], batch['query_name'], protos)
         logit_mask = low_masks
@@ -56,11 +62,14 @@ if __name__ == '__main__':
 
     # Arguments parsing
     parser = argparse.ArgumentParser(description='Visual Prompt Encoder Pytorch Implementation')
-    parser.add_argument('--datapath', type=str, default='/data/databases/')
+    parser.add_argument('--datapath', type=str, default='/data/databases')
     parser.add_argument('--benchmark', type=str, default='maps', choices=['pascal', 'coco', 'maps', 'maps_siegfried'])
     parser.add_argument('--eval', action='store_true')
+    parser.add_argument('--train_prompt', action='store_true')
+    parser.add_argument('--train_mask', action='store_true')
+    parser.add_argument('--rank', type=int, default=4) # batch size = num_gpu * bsz default num_gpu = 4
     parser.add_argument('--logpath', type=str, default='')
-    parser.add_argument('--bsz', type=int, default=2) # batch size = num_gpu * bsz default num_gpu = 4
+    parser.add_argument('--bsz', type=int, default=8) # batch size = num_gpu * bsz default num_gpu = 4
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--weight_decay', type=float, default=1e-6)
     parser.add_argument('--epochs', type=int, default=50)
@@ -90,6 +99,7 @@ if __name__ == '__main__':
 
     # Model initialization
     model = VRP_encoder(args, args.backbone, False)
+    sam_model = SAM_pred(args)
     if args.eval:
         model_path = 'logs/' + args.logpath + '.log/best_model.pt'
         state_dict = torch.load(model_path, map_location=device, mmap=True)
@@ -100,12 +110,13 @@ if __name__ == '__main__':
     if utils.is_main_process():
         Logger.log_params(model)
 
-    sam_model = SAM_pred()
     sam_model.to(device)
     model.to(device)
     model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+    sam_model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(sam_model)
     # Device setup
     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True)
+    sam_model = torch.nn.parallel.DistributedDataParallel(sam_model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True)
     
     for param in model.module.layer0.parameters():
         param.requires_grad = False
@@ -128,9 +139,9 @@ if __name__ == '__main__':
 
     # Dataset initialization
     FSSDataset.initialize(img_size=512, datapath=args.datapath, use_original_imgsize=False)
-    dataloader_trn = FSSDataset.build_dataloader(args.benchmark, args.bsz, args.nworker, args.fold, 'trn')
+    dataloader_trn = FSSDataset.build_dataloader(args.benchmark, args.bsz, args.nworker, args.fold, 'trn', shot=1)
 
-    dataloader_val = FSSDataset.build_dataloader(args.benchmark, args.bsz, args.nworker, args.fold, 'val')
+    dataloader_val = FSSDataset.build_dataloader(args.benchmark, args.bsz, args.nworker, args.fold, 'val', shot=1)
 
     print('Model is evaluated on {}'.format(args.benchmark))
 
@@ -153,6 +164,7 @@ if __name__ == '__main__':
             if utils.is_main_process():
                 if not args.eval:
                     Logger.save_model_miou(model, epoch, val_miou)
+
         if utils.is_main_process() and not args.eval:
             Logger.tbd_writer.add_scalars('data/loss', {'trn_loss': trn_loss, 'val_loss': val_loss}, epoch)
             Logger.tbd_writer.add_scalars('data/miou', {'trn_miou': trn_miou, 'val_miou': val_miou}, epoch)

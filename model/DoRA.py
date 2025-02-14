@@ -76,7 +76,7 @@ class DoRA_Sam(nn.Module):
         torch.Size([1, 1000])
     """
 
-    def __init__(self, sam_model: Sam, r: int, dora_layer=None):
+    def __init__(self, sam_model: Sam, r: int, dora_layer=None, freeze_prompt_encoder=True, freeze_mask_decoder=True):
         super(DoRA_Sam, self).__init__()
 
         assert r > 0
@@ -94,8 +94,12 @@ class DoRA_Sam(nn.Module):
         # lets freeze first
         for param in sam_model.image_encoder.parameters():
             param.requires_grad = False
-        for param in sam_model.prompt_encoder.parameters():
-            param.requires_grad = False
+        if freeze_prompt_encoder:
+            for param in sam_model.prompt_encoder.parameters():
+                param.requires_grad = False
+        if freeze_mask_decoder:
+            for param in sam_model.mask_decoder.parameters():
+                param.requires_grad = False
 
         # Here, we do the surgery
         for t_layer_i, blk in enumerate(sam_model.image_encoder.blocks):

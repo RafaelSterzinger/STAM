@@ -8,13 +8,14 @@ import numpy as np
 from model.DoRA import DoRA_Sam
 
 class SAM_pred(nn.Module):
-    def __init__(self, dora_rank=4):
+    def __init__(self, args):
         super().__init__()
-        self.sam_model = sam_model_registry['vit_h']('model/weights/sam_vit_h_4b8939.pth')
-        if dora_rank > 0:
-            self.dora = DoRA_Sam(self.sam_model, dora_rank)
+        self.sam_model = sam_model_registry['vit_b']('model/weights/sam_vit_b_01ec64.pth')
+        if args.rank > 0:
+            self.dora = DoRA_Sam(self.sam_model, args.rank, freeze_prompt_encoder=not args.train_prompt, freeze_mask_decoder=not args.train_mask)
             self.sam_model = self.dora.sam
         else:
+            self.dora = None
             self.sam_model.eval()
     
     def train(self, mode = True):
@@ -29,8 +30,8 @@ class SAM_pred(nn.Module):
     def forward_img_encoder(self, query_img):
         query_img = F.interpolate(query_img, (1024,1024), mode='bilinear', align_corners=True)
 
-        with torch.no_grad():
-            query_feats = self.sam_model.image_encoder(query_img)
+        #with torch.no_grad():
+        query_feats = self.sam_model.image_encoder(query_img)
         return  query_feats
     
     def get_feat_from_np(self, query_img, query_name, protos):
@@ -42,15 +43,19 @@ class SAM_pred(nn.Module):
 
             assert '/root' not in name
                 
-            if name + '.npy' not in files_name:
-                query_feats_np = self.forward_img_encoder(query_img[idx, :, :, :].unsqueeze(0))
-                query_feat_list.append(query_feats_np)
-                query_feats_np = query_feats_np.detach().cpu().numpy()
-                np.save(np_feat_path + name + '.npy', query_feats_np)
-            else:
-                sub_query_feat = torch.from_numpy(np.load(np_feat_path + name + '.npy')).to(protos.device)
-                query_feat_list.append(sub_query_feat)
-                del sub_query_feat
+           # if name + '.npy' not in files_name:
+           #     query_feats_np = self.forward_img_encoder(query_img[idx, :, :, :].unsqueeze(0))
+           #     query_feat_list.append(query_feats_np)
+           #     query_feats_np = query_feats_np.detach().cpu().numpy()
+           #     np.save(np_feat_path + name + '.npy', query_feats_np)
+           # else:
+           #     sub_query_feat = torch.from_numpy(np.load(np_feat_path + name + '.npy')).to(protos.device)
+           #     query_feat_list.append(sub_query_feat)
+           #     del sub_query_feat
+            query_feats_np = self.forward_img_encoder(query_img[idx, :, :, :].unsqueeze(0))
+            query_feat_list.append(query_feats_np)
+           # query_feats_np = query_feats_np.detach().cpu().numpy()
+
         query_feats_np = torch.cat(query_feat_list, dim=0)
         return query_feats_np
 
@@ -95,11 +100,11 @@ class SAM_pred(nn.Module):
         
         # query_img = F.interpolate(query_img, (1024,1024), mode='bilinear', align_corners=True)
         protos, point_prompt = self.get_pormpt(protos, points_mask)
-        with torch.no_grad():
+        # with torch.no_grad():
             #-------------save_sam_img_feat-------------------------
             # query_feats = self.forward_img_encoder(query_img)
 
-            query_feats = self.get_feat_from_np(query_img, query_name, protos)
+        query_feats = self.get_feat_from_np(query_img, query_name, protos)
 
         q_sparse_em, q_dense_em = self.forward_prompt_encoder(
                 points=point_prompt,
